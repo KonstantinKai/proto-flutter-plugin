@@ -8,67 +8,9 @@ mod flutter_tool {
     #[tokio::test(flavor = "multi_thread")]
     async fn supports_macos_arm64() {
         let sandbox = create_empty_proto_sandbox();
-        let plugin_arm = sandbox
-            .create_plugin_with_config("flutter-test", |config| {
-                config.host(HostOS::MacOS, HostArch::Arm64);
-            })
-            .await;
-
-        assert_eq!(
-            plugin_arm
-                .download_prebuilt(DownloadPrebuiltInput {
-                    context: ToolContext {
-                        version: VersionSpec::parse("3.29.0").unwrap(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                })
-                .await,
-            DownloadPrebuiltOutput {
-                download_url:
-                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_3.29.0-stable.zip"
-                        .into(),
-                checksum: Some("8c3196363c7e79ead5bd2bd657cad6915afdf5b315ca51bfa7e569f490ec3de4".into()),
-                ..Default::default()
-            }
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn supports_macos_arm64_without_m1_compat() {
-        let sandbox = create_empty_proto_sandbox();
-        let plugin_arm = sandbox
-            .create_plugin_with_config("flutter-test", |config| {
-                config.host(HostOS::MacOS, HostArch::Arm64);
-            })
-            .await;
-
-        assert_eq!(
-            plugin_arm
-                .download_prebuilt(DownloadPrebuiltInput {
-                    context: ToolContext {
-                        // unavailable version
-                        version: VersionSpec::parse("2.29.0").unwrap(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                })
-                .await,
-            DownloadPrebuiltOutput {
-                download_url:
-                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_2.29.0-stable.zip"
-                        .into(),
-                ..Default::default()
-            },
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn supports_macos_x64() {
-        let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("flutter-test", |config| {
-                config.host(HostOS::MacOS, HostArch::X64);
+                config.host(HostOS::MacOS, HostArch::Arm64);
             })
             .await;
 
@@ -84,11 +26,11 @@ mod flutter_tool {
                 .await,
             DownloadPrebuiltOutput {
                 download_url:
-                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_3.29.0-stable.zip"
+                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_3.29.0-stable.zip"
                         .into(),
-                checksum: Some("d3b2d01b7f6713f3a8c3c51ea4a4fb77a2775cfc69708f608bd2ff688493242a".into()),
+                checksum: Some("8c3196363c7e79ead5bd2bd657cad6915afdf5b315ca51bfa7e569f490ec3de4".into()),
                 ..Default::default()
-            },
+            }
         );
     }
 
@@ -145,6 +87,64 @@ mod flutter_tool {
                     "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.29.0-stable.zip"
                         .into(),
                 checksum: Some("0b0080912f856b66843a2061bc73e73ab1ea20b68f068100956da69783b4ca70".into()),
+                ..Default::default()
+            },
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn supports_versions_with_v_prefix_stable() {
+        let sandbox = create_empty_proto_sandbox();
+        let plugin = sandbox
+            .create_plugin_with_config("flutter-test", |config| {
+                config.host(HostOS::MacOS, HostArch::X64);
+            })
+            .await;
+
+        assert_eq!(
+            plugin
+                .download_prebuilt(DownloadPrebuiltInput {
+                    context: ToolContext {
+                        version: VersionSpec::parse("1.2.1").unwrap(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .await,
+            DownloadPrebuiltOutput {
+                download_url:
+                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_v1.2.1-stable.zip"
+                        .into(),
+                checksum: Some("74ac8397ea29720f116980ea00cf60c34430be1f64489b407f7cf95553babbef".into()),
+                ..Default::default()
+            },
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn supports_versions_with_v_prefix_beta() {
+        let sandbox = create_empty_proto_sandbox();
+        let plugin = sandbox
+            .create_plugin_with_config("flutter-test", |config| {
+                config.host(HostOS::MacOS, HostArch::X64);
+            })
+            .await;
+
+        assert_eq!(
+            plugin
+                .download_prebuilt(DownloadPrebuiltInput {
+                    context: ToolContext {
+                        version: VersionSpec::parse("1.12.13+hotfix.6").unwrap(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .await,
+            DownloadPrebuiltOutput {
+                download_url:
+                    "https://storage.googleapis.com/flutter_infra_release/releases/beta/macos/flutter_macos_v1.12.13+hotfix.6-beta.zip"
+                        .into(),
+                checksum: Some("05c7064de1f793ed1660422bc8f3fc8cdcaed38618bddbee785413b92d80c364".into()),
                 ..Default::default()
             },
         );

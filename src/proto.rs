@@ -35,34 +35,46 @@ pub fn load_versions(Json(_): Json<LoadVersionsInput>) -> FnResult<Json<LoadVers
     let mut output = LoadVersionsOutput::default();
 
     for item in response.releases.iter() {
-        // Filter out versions that starts with "v", old versions, dev releases
-        if item.version.starts_with("v") || item.version.starts_with("0") || item.channel.eq("dev")
-        {
-            continue;
-        }
+        if let Ok(version_spec) = VersionSpec::parse(&item.version) {
+            let version_as_option = version_spec.as_version();
 
-        let unresolved_spec = UnresolvedVersionSpec::parse(&item.version)?;
+            match version_as_option {
+                Some(version) => {
+                    if version.major == 0
+                        || (item.channel.eq("beta")
+                            && (version.pre.is_empty() && version.build.is_empty()))
+                        || (item.channel.eq("stable") && !version.build.is_empty())
+                        || check_version_for_os_and_arch(&env, &version_spec).is_err()
+                        || item.channel.eq("dev")
+                        || output.versions.contains(&version_spec)
+                    {
+                        continue;
+                    }
+                }
+                _ => {
+                    continue;
+                }
+            }
 
-        if response.latest.stable == item.hash {
-            output.latest = Some(unresolved_spec.clone());
-            output
-                .aliases
-                .insert("latest".into(), unresolved_spec.clone());
-            output
-                .aliases
-                .insert("stable".into(), unresolved_spec.clone());
-        }
+            let unresolved_version_spec = version_spec.to_unresolved_spec();
 
-        if response.latest.beta == item.hash {
-            output
-                .aliases
-                .insert("beta".into(), unresolved_spec.clone());
-        }
+            if response.latest.stable == item.hash {
+                output.latest = Some(unresolved_version_spec.clone());
+                output
+                    .aliases
+                    .insert("latest".into(), unresolved_version_spec.clone());
+                output
+                    .aliases
+                    .insert("stable".into(), unresolved_version_spec.clone());
+            }
 
-        let resolved_spec = unresolved_spec.to_resolved_spec();
+            if response.latest.beta == item.hash {
+                output
+                    .aliases
+                    .insert("beta".into(), unresolved_version_spec.clone());
+            }
 
-        if !output.versions.contains(&resolved_spec) {
-            output.versions.push(resolved_spec.clone());
+            output.versions.push(version_spec.clone());
         }
     }
 
@@ -74,42 +86,46 @@ pub fn download_prebuilt(
     Json(input): Json<DownloadPrebuiltInput>,
 ) -> FnResult<Json<DownloadPrebuiltOutput>> {
     let env = get_host_environment()?;
+    let version_spec = input.context.version.as_ref();
 
-    check_supported_os_and_arch(
-        NAME,
-        &env,
-        permutations! [
-            HostOS::Linux => [HostArch::X64],
-            HostOS::MacOS => [HostArch::X64, HostArch::Arm64],
-            HostOS::Windows => [HostArch::X64],
-        ],
-    )?;
+    check_version_for_os_and_arch(&env, version_spec)?;
 
-    let input_version = input.context.version;
-
-    if input_version.is_canary() {
+    if version_spec.is_canary() {
         return Err(plugin_err!(PluginError::Message(format!(
             "{NAME} does not support canary/nightly versions. Plase use `proto install flutter beta` instead"
         ))));
     }
 
-    let os = get_os_as_str(&env);
-    let version = input_version.as_version().unwrap();
     let base_url = get_tool_config::<FlutterPluginConfig>()?.base_url;
-    let (version_as_str, channel) = (
-        version.to_string(),
-        if !version.pre.is_empty() || !version.build.is_empty() {
-            "beta"
-        } else {
-            "stable"
-        },
-    );
-    let arch = get_arch_as_str(&env, &input_version, channel);
+    let os = get_os_as_str(&env);
+    let version = version_spec.as_version().unwrap();
+    let version_as_string = version.to_string();
+    let channel = if !version.pre.is_empty() || !version.build.is_empty() {
+        "beta"
+    } else {
+        "stable"
+    };
+    let version_v_prefix = if (channel == "stable"
+        && version_spec.lt(VersionSpec::parse("1.17.0").unwrap().as_ref()))
+        || (channel == "beta"
+            && version_spec.lt(VersionSpec::parse("1.17.0-dev.3.1").unwrap().as_ref()))
+    {
+        "v"
+    } else {
+        ""
+    };
+    let arch = if env.arch == HostArch::Arm64 {
+        "arm64_"
+    } else {
+        ""
+    };
 
     // TODO: Not ideal, but this is the only solution at the moment
     let response = fetch_dist(&env)?;
     let checksum = response.releases.iter().find_map(|item| {
-        if item.version == version_as_str && item.channel == channel {
+        if item.version == format!("{}{}", version_v_prefix, version_as_string)
+            && item.channel == channel
+        {
             if arch == "arm64_" {
                 if item.arch == Some("arm64".into()) {
                     return Some(item.sha256.clone());
@@ -125,7 +141,7 @@ pub fn download_prebuilt(
     });
 
     let download_url =
-        format!("{base_url}/{channel}/{os}/flutter_{os}_{arch}{version_as_str}-{channel}.zip");
+        format!("{base_url}/{channel}/{os}/flutter_{os}_{arch}{version_v_prefix}{version_as_string}-{channel}.zip");
 
     Ok(Json(DownloadPrebuiltOutput {
         download_url,
@@ -203,34 +219,66 @@ pub fn parse_version_file(
     Ok(Json(ParseVersionFileOutput { version }))
 }
 
+pub fn check_version_for_os_and_arch(
+    env: &HostEnvironment,
+    version_spec: &VersionSpec,
+) -> FnResult<()> {
+    let version = version_spec.as_version().unwrap();
+
+    let unresolved_version_spec_option = match env.os {
+        HostOS::Linux => match env.arch {
+            HostArch::X64 => None::<UnresolvedVersionSpec>,
+            _ => UnresolvedVersionSpec::parse("0.0.0").ok(),
+        },
+        HostOS::MacOS => match env.arch {
+            HostArch::Arm64
+                if !version.pre.is_empty()
+                    && version_spec.lt(VersionSpec::Semantic(SemVer(
+                        Version::parse("2.12.0-4.1.pre").ok().unwrap(),
+                    ))
+                    .as_ref()) =>
+            {
+                UnresolvedVersionSpec::parse(">=2.12.0-4.1.pre").ok()
+            }
+            HostArch::Arm64
+                if version_spec
+                    .lt(VersionSpec::Semantic(SemVer(Version::new(3, 0, 0))).as_ref()) =>
+            {
+                UnresolvedVersionSpec::parse(">=3.0.0").ok()
+            }
+            _ => None::<UnresolvedVersionSpec>,
+        },
+        HostOS::Windows => match env.arch {
+            HostArch::X64 => None::<UnresolvedVersionSpec>,
+            _ => UnresolvedVersionSpec::parse("0.0.0").ok(),
+        },
+        _ => UnresolvedVersionSpec::parse("0.0.0").ok(),
+    };
+
+    match unresolved_version_spec_option {
+        Some(unresolved_version_spec) => match unresolved_version_spec {
+            UnresolvedVersionSpec::Req(req) => {
+                let arch = env.arch.to_string();
+
+                Err(plugin_err!(PluginError::Message(format!(
+                    "Unable to install {NAME}@{version} for the current architecture {arch} and os. Require {req}"
+                ))))
+            }
+            _ => Err(PluginError::UnsupportedOS {
+                tool: NAME.to_owned(),
+                os: env.os.to_string(),
+            }
+            .into()),
+        },
+        _ => Ok(()),
+    }
+}
+
 fn get_os_as_str(env: &HostEnvironment) -> String {
     match env.os {
         HostOS::MacOS => "macos".into(),
         HostOS::Windows => "windows".into(),
         _ => "linux".into(),
-    }
-}
-
-fn get_arch_as_str(env: &HostEnvironment, version: &VersionSpec, channel: &str) -> String {
-    let empty = String::from("");
-
-    match env.os {
-        HostOS::MacOS => {
-            if env.arch == HostArch::Arm64 {
-                let m1_compat_stable_version = VersionSpec::parse("3.0.0").ok().unwrap();
-                let m1_compat_beta_version = VersionSpec::parse("2.12.0-4.1.pre").ok().unwrap();
-                let arch = String::from("arm64_");
-
-                match true {
-                    _ if channel == "stable" && version.lt(&m1_compat_stable_version) => empty,
-                    _ if channel == "beta" && version.lt(&m1_compat_beta_version) => empty,
-                    _ => arch,
-                }
-            } else {
-                empty
-            }
-        }
-        _ => empty,
     }
 }
 
