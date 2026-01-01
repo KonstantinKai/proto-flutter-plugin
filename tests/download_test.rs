@@ -55,7 +55,7 @@ mod flutter_tool {
                 .await,
             DownloadPrebuiltOutput {
                 download_url:
-                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.29.0-stable.zip"
+                    "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.29.0-stable.tar.xz"
                         .into(),
                 checksum: Some("1f98f3de2931e1d097970e56df691b035f6840aa05be632c4fa2a2298c7cfdd8".into()),
                 ..Default::default()

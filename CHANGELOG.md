@@ -1,3 +1,9 @@
+## 0.2.1
+
+#### Fixes
+
+- Fixed Linux download URL: use `.tar.xz` extension instead of `.zip`
+
 ## 0.2.0
 
 #### Updates

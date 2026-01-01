@@ -140,8 +140,14 @@ pub fn download_prebuilt(
         }
     });
 
+    let ext = if env.os == HostOS::Linux {
+        "tar.xz"
+    } else {
+        "zip"
+    };
+
     let download_url =
-        format!("{base_url}/{channel}/{os}/flutter_{os}_{arch}{version_v_prefix}{version_as_string}-{channel}.zip");
+        format!("{base_url}/{channel}/{os}/flutter_{os}_{arch}{version_v_prefix}{version_as_string}-{channel}.{ext}");
 
     Ok(Json(DownloadPrebuiltOutput {
         download_url,
