@@ -1,0 +1,48 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v[0-9]+*"
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Install wabt
+        run: sudo apt-get update && sudo apt-get install -y wabt
+
+      - name: Install binaryen
+        run: |
+          curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_121/binaryen-version_121-x86_64-linux.tar.gz | tar xz -C /tmp
+          echo "/tmp/binaryen-version_121/bin" >> "$GITHUB_PATH"
+
+      - name: Build WASM plugin (release)
+        run: cargo build --target wasm32-wasip1 --release
+
+      - name: Optimize and strip
+        run: |
+          input="target/wasm32-wasip1/release/flutter_tool.wasm"
+          output="builds/flutter_tool.wasm"
+          mkdir -p builds
+          wasm-opt -Os --enable-bulk-memory "$input" --output "$output"
+          wasm-strip "$output"
+          sha256sum "$output" > "$output.sha256"
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: builds/*
+          artifactErrorsFailBuild: true
+          skipIfReleaseExists: true

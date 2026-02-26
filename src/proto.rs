@@ -92,7 +92,7 @@ pub fn download_prebuilt(
 
     if version_spec.is_canary() {
         return Err(plugin_err!(PluginError::Message(format!(
-            "{NAME} does not support canary/nightly versions. Plase use `proto install flutter beta` instead"
+            "{NAME} does not support canary/nightly versions. Please use `proto install flutter beta` instead"
         ))));
     }
 
@@ -105,6 +105,9 @@ pub fn download_prebuilt(
     } else {
         "stable"
     };
+    // Flutter archives before 1.17.0 (stable) / 1.17.0-dev.3.1 (beta) used a "v" prefix
+    // in the filename (e.g. flutter_macos_v1.2.1-stable.zip). Starting from 1.17.0 the
+    // prefix was dropped. See https://docs.flutter.dev/release/archive
     let version_v_prefix = if (channel == "stable"
         && version_spec.lt(VersionSpec::parse("1.17.0").unwrap().as_ref()))
         || (channel == "beta"
@@ -120,7 +123,6 @@ pub fn download_prebuilt(
         ""
     };
 
-    // TODO: Not ideal, but this is the only solution at the moment
     let response = fetch_dist(&env)?;
     let checksum = response.releases.iter().find_map(|item| {
         if item.version == format!("{}{}", version_v_prefix, version_as_string)
@@ -200,7 +202,7 @@ pub fn pre_run(Json(input): Json<RunHook>) -> FnResult<Json<RunHookResult>> {
 
     match args[0].as_str() {
         "channel" if args.len() == 2 => Err(plugin_err!(PluginError::Message(format!(
-            "{NAME} does not support channel switching with proto. Plase use `proto install flutter beta` or check it out with git manualy instead. See https://docs.flutter.dev/release/archive#main-channel"
+            "{NAME} does not support channel switching with proto. Please use `proto install flutter beta` or check it out with git manually instead. See https://docs.flutter.dev/release/archive#main-channel"
         )))),
         _ => Ok(Json(result))
     }
@@ -236,6 +238,9 @@ pub fn check_version_for_os_and_arch(
             HostArch::X64 => None::<UnresolvedVersionSpec>,
             _ => UnresolvedVersionSpec::parse("0.0.0").ok(),
         },
+        // Flutter added macOS ARM64 (Apple Silicon) support progressively:
+        // - Beta/pre-release builds: available from 2.12.0-4.1.pre (first M1 beta)
+        // - Stable builds: available from 3.0.0 (first stable with arm64 archives)
         HostOS::MacOS => match env.arch {
             HostArch::Arm64
                 if !version.pre.is_empty()
@@ -291,6 +296,18 @@ fn get_os_as_str(env: &HostEnvironment) -> String {
 fn fetch_dist(env: &HostEnvironment) -> AnyResult<FlutterDist> {
     let suffix = get_os_as_str(env);
     let base_url = get_tool_config::<FlutterPluginConfig>()?.base_url;
+    let url = format!("{base_url}/releases_{suffix}.json");
+    let cache_key = format!("dist_{suffix}");
 
-    fetch_json::<String, FlutterDist>(format!("{base_url}/releases_{suffix}.json"))
+    if let Ok(Some(cached)) = var::get::<Vec<u8>>(&cache_key) {
+        if let Ok(dist) = json::from_slice::<FlutterDist>(&cached) {
+            return Ok(dist);
+        }
+    }
+
+    let bytes = fetch_bytes(&url)?;
+    let _ = var::set(&cache_key, &bytes);
+    let dist: FlutterDist = json::from_slice(&bytes)?;
+
+    Ok(dist)
 }
