@@ -4,7 +4,7 @@ use extism_pdk::*;
 use proto_pdk::*;
 use schematic::SchemaBuilder;
 
-use crate::{FlutterDist, FlutterPluginConfig, PubspecYaml};
+use crate::{Fvmrc, FlutterDist, FlutterPluginConfig, PubspecYaml};
 
 #[host_fn]
 extern "ExtismHost" {
@@ -189,8 +189,11 @@ pub fn locate_executables(
 #[plugin_fn]
 pub fn detect_version_files(_: ()) -> FnResult<Json<DetectVersionOutput>> {
     Ok(Json(DetectVersionOutput {
-        // TODO: Add fvm support
-        files: vec!["pubspec.yml".into(), "pubspec.yaml".into()],
+        files: vec![
+            ".fvmrc".into(),
+            "pubspec.yml".into(),
+            "pubspec.yaml".into(),
+        ],
         ignore: vec![],
     }))
 }
@@ -214,7 +217,13 @@ pub fn parse_version_file(
 ) -> FnResult<Json<ParseVersionFileOutput>> {
     let mut version = None;
 
-    if input.file.starts_with("pubspec") {
+    if input.file == ".fvmrc" {
+        let fvmrc: Fvmrc = json::from_str(&input.content)?;
+
+        if let Some(flutter_version) = fvmrc.flutter {
+            version = Some(UnresolvedVersionSpec::parse(flutter_version)?);
+        }
+    } else if input.file.starts_with("pubspec") {
         let pubspec: PubspecYaml = serde_yml::from_str(&input.content)?;
 
         if let Some(env) = pubspec.environment {

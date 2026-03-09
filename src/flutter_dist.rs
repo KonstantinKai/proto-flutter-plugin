@@ -34,3 +34,8 @@ pub struct PubspecYaml {
     pub name: String,
     pub environment: Option<PubspecYamlEnvField>,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct Fvmrc {
+    pub flutter: Option<String>,
+}

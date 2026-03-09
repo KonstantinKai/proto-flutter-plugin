@@ -41,6 +41,7 @@ proto pin flutter 3.29
 
 The plugin automatically detects Flutter versions from:
 
+- `.fvmrc` — reads `flutter` field ([FVM](https://fvm.app/) configuration file)
 - `pubspec.yaml` / `pubspec.yml` — reads `environment.flutter` field (supports version constraints)
 
 ## Configuration

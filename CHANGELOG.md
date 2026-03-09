@@ -1,3 +1,9 @@
+## 0.3.0
+
+#### Features
+
+- Detect Flutter version from `.fvmrc` file ([FVM](https://fvm.app/) support)
+
 ## 0.2.2
 
 #### Fixes

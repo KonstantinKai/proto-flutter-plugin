@@ -93,6 +93,25 @@ environment:
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn parses_fvmrc() {
+        let sandbox = create_empty_proto_sandbox();
+        let plugin = sandbox.create_plugin("flutter-test").await;
+
+        assert_eq!(
+            plugin
+                .parse_version_file(ParseVersionFileInput {
+                    content: r#"{ "flutter": "3.29.0" }"#.into(),
+                    file: ".fvmrc".into(),
+                    ..Default::default()
+                })
+                .await,
+            ParseVersionFileOutput {
+                version: Some(UnresolvedVersionSpec::parse("3.29.0").unwrap()),
+            }
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     #[should_panic]
     async fn check_versions_macos_arm64() {
         let sandbox = create_empty_proto_sandbox();
