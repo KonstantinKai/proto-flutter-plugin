@@ -175,10 +175,10 @@ pub fn locate_executables(
             ),
             (
                 "dart".into(),
-                ExecutableConfig::new(
-                    env.os
-                        .for_native("flutter/bin/dart", "flutter/bin/dart.bat"),
-                ),
+                ExecutableConfig::new(env.os.for_native(
+                    "flutter/bin/cache/dart-sdk/bin/dart",
+                    "flutter/bin/cache/dart-sdk/bin/dart.exe",
+                )),
             ),
         ]),
         globals_lookup_dirs: vec!["$FLUTTER_ROOT/bin".into()],
