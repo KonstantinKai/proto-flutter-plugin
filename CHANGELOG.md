@@ -1,3 +1,9 @@
+## 0.3.1
+
+#### Fixes
+
+- Point `dart` executable directly at `flutter/bin/cache/dart-sdk/bin/dart` instead of the Flutter wrapper script. The wrapper triggers `flutter_tools` snapshot rebuilds, `pub upgrade`, and a git revision check on every invocation, making standalone Dart commands (e.g. `dart compile`) slow or fragile in proto-managed environments. ([#4](https://github.com/KonstantinKai/proto-flutter-plugin/pull/4))
+
 ## 0.3.0
 
 #### Features
